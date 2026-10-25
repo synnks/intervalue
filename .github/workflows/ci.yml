@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          check-latest: true
+          cache: sbt
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - uses: sbt/setup-sbt@v1.5.12
+        with:
+          sbt-runner-version: 2.0.11
+
+      - name: Check formatting, compile, and test
+        run: sbt --batch "; scalafmtSbtCheck; scalafmtCheckAll; compile; testFull"
