@@ -1,32 +1,46 @@
 package synnks.intervalue
 
-import scala.collection.immutable.TreeMap
+import spire.algebra.Order
 
 /** An immutable piecewise-constant function over an ordered key domain. */
-final class IntervalMap[K, V] private (
-  val aboveAll: V,
-  private val breakpoints: TreeMap[K, IntervalMap.ValueAtAndBelow[V]]
-) {
+sealed trait IntervalMap[K, V] extends Serializable {
 
   /** Returns the value at `key`. */
-  def apply(key: K): V = breakpoints.minAfter(key) match {
-    case Some((boundary, value)) if breakpoints.ordering.equiv(key, boundary) => value.at
-    case Some((_, value))                                                     => value.below
-    case None                                                                 => aboveAll
-  }
+  def apply(key: K): V
 
   /** Returns the value at `key`. */
   def at(key: K): V = apply(key)
 
+  /** Returns the value on the open region immediately below `key` in the key ordering. */
+  def below(key: K): V
+
+  /** Returns the value on the open region immediately above `key` in the key ordering. */
+  def above(key: K): V
+
   /** The value on the unbounded lower tail. */
-  def belowAll: V = breakpoints.headOption.map(_._2.below).getOrElse(aboveAll)
+  def belowAll: V
+
+  /** The value on the unbounded upper tail. */
+  def aboveAll: V
 }
 
 object IntervalMap {
 
-  final private case class ValueAtAndBelow[V](at: V, below: V)
+  private case class Impl[K, V](aboveAll: V, breakpoints: Breakpoints[K, V]) extends IntervalMap[K, V] {
+
+    override def apply(key: K): V = breakpoints.at(key) match {
+      case Some(value) => value
+      case None        => aboveAll
+    }
+
+    override def below(key: K): V = breakpoints.below(key).getOrElse(aboveAll)
+
+    override def above(key: K): V = breakpoints.above(key).getOrElse(aboveAll)
+
+    override def belowAll: V = breakpoints.headOption.map(_._2.below).getOrElse(aboveAll)
+  }
 
   /** Creates a map that returns `value` for every key. */
-  def constant[K: Ordering, V](value: V): IntervalMap[K, V] =
-    new IntervalMap(value, TreeMap.empty[K, ValueAtAndBelow[V]])
+  def constant[K: Order, V](value: V): IntervalMap[K, V] =
+    Impl(value, Breakpoints.empty[K, V])
 }

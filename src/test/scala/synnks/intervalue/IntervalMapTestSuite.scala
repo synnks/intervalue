@@ -1,7 +1,10 @@
 package synnks.intervalue
 
 import munit.ScalaCheckSuite
+import org.scalacheck.Arbitrary.arbitrary
+import org.scalacheck.Gen
 import org.scalacheck.Prop.forAll
+import spire.algebra.Order
 
 class IntervalMapTestSuite extends ScalaCheckSuite {
 
@@ -11,43 +14,53 @@ class IntervalMapTestSuite extends ScalaCheckSuite {
 
       assertEquals(map(key), value)
       assertEquals(map.at(key), value)
+      assertEquals(map.below(key), value)
+      assertEquals(map.above(key), value)
       assertEquals(map.belowAll, value)
       assertEquals(map.aboveAll, value)
     }
   }
 
   final private case class Key(value: String)
-  private given Ordering[Key] = Ordering.by(_.value)
+  private given Order[Key] = Order.by(_.value)
 
   final private case class Payload(value: String)
 
-  property("constant maps support custom ordered keys and values without an algebra") {
+  property("constant maps support custom ordered keys without requiring value typeclasses") {
     forAll { (key: String, content: String) =>
       val value = Payload(content)
       val map   = IntervalMap.constant[Key, Payload](value)
 
       assertEquals(map(Key(key)), value)
       assertEquals(map.at(Key(key)), value)
+      assertEquals(map.below(Key(key)), value)
+      assertEquals(map.above(Key(key)), value)
       assertEquals(map.belowAll, value)
       assertEquals(map.aboveAll, value)
     }
   }
 
-  test("constant maps preserve None as an ordinary value") {
-    val map = IntervalMap.constant[Int, Option[String]](None)
+  property("constant maps preserve None as an ordinary value") {
+    forAll { (key: Int) =>
+      val map = IntervalMap.constant[Int, Option[String]](None)
 
-    assertEquals(map(0), None)
-    assertEquals(map.at(0), None)
-    assertEquals(map.belowAll, None)
-    assertEquals(map.aboveAll, None)
+      assertEquals(map(key), None)
+      assertEquals(map.at(key), None)
+      assertEquals(map.below(key), None)
+      assertEquals(map.above(key), None)
+      assertEquals(map.belowAll, None)
+      assertEquals(map.aboveAll, None)
+    }
   }
 
-  test("constant maps cover the extreme keys of a bounded domain") {
-    val map = IntervalMap.constant[Long, String]("constant")
+  property("constant maps cover the extreme keys of a bounded domain") {
+    forAll(Gen.oneOf(Long.MinValue, Long.MaxValue), arbitrary[String]) { (key, value) =>
+      val map = IntervalMap.constant[Long, String](value)
 
-    List(Long.MinValue, -1L, 0L, 1L, Long.MaxValue).foreach { key =>
-      assertEquals(map(key), "constant")
-      assertEquals(map.at(key), "constant")
+      assertEquals(map(key), value)
+      assertEquals(map.at(key), value)
+      assertEquals(map.below(key), value)
+      assertEquals(map.above(key), value)
     }
   }
 }
