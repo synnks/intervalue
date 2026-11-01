@@ -9,10 +9,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  verify:
-    runs-on: ubuntu-26.04
-    timeout-minutes: 15
+  format:
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v7.0.1
@@ -20,14 +23,42 @@ jobs:
       - uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: "25"
+          check-latest: true
+          cache: sbt
+          cache-read-only: true
+
+      - uses: sbt/setup-sbt@v1.5.13
+
+      - name: Check formatting
+        run: sbt --batch "; scalafmtSbtCheck; scalafmtCheckAll"
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
           check-latest: true
           cache: sbt
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
-      - uses: sbt/setup-sbt@v1.5.12
-        with:
-          sbt-runner-version: 2.0.11
+      - uses: sbt/setup-sbt@v1.5.13
 
-      - name: Check formatting, compile, and test
-        run: sbt --batch "; scalafmtSbtCheck; scalafmtCheckAll; compile; testFull"
+      - name: Compile and run full tests
+        run: sbt --batch "; compile; testFull"
+
+  greenlight:
+    if: always()
+    needs: [format, test]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require all checks to succeed
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: jq --exit-status 'length > 0 and all(.[]; .result == "success")' <<< "$JOB_RESULTS"
